@@ -61,26 +61,26 @@ try
             var connectionObjectPath = await activeConnection.GetConnectionAsync();
             Console.WriteLine($"    Name: {connectionObjectPath}");
 
-            var connectionObj = service.CreateConnection(connectionObjectPath);
+            NetworkManager.DBus.Connection connectionObj = service.CreateConnection(connectionObjectPath);
 
             var settings = await connectionObj.GetSettingsAsync();
 
             if (settings.TryGetValue("connection", out var connSection) &&
             connSection.TryGetValue("type", out var typeValue) &&
-            (string)typeValue == "802-11-wireless")
+            typeValue == "802-11-wireless")
             {
                 string connectionName = "Unknown";
                 string ssid = "Unknown";
 
                 if (connSection.TryGetValue("id", out var idValue))
                 {
-                    connectionName = (string)idValue;
+                    connectionName = idValue.ToString();
                 }
 
                 if (settings.TryGetValue("802-11-wireless", out var wifiSection) &&
                     wifiSection.TryGetValue("ssid", out var ssidValue))
                 {
-                    byte[] ssidBytes = ((VariantValue[])ssidValue).Select(v => (byte)v).ToArray();
+                    byte[] ssidBytes = (ssidValue.GetByte()).Select(v => (byte)v).ToArray();
                     ssid = Encoding.UTF8.GetString(ssidBytes);
                 }
 
