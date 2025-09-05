@@ -1,4 +1,4 @@
-namespace NetworkManager.DBus
+namespace NetworkManager.DBus.OneFile
 {
     using System;
     using Tmds.DBus.Protocol;

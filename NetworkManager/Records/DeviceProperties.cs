@@ -1,0 +1,40 @@
+using System;
+using Tmds.DBus.Protocol;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+namespace NetworkManager.DBus;
+record DeviceProperties
+{
+    public string Udi { get; set; } = default!;
+    public string Path { get; set; } = default!;
+    public string Interface { get; set; } = default!;
+    public string IpInterface { get; set; } = default!;
+    public string Driver { get; set; } = default!;
+    public string DriverVersion { get; set; } = default!;
+    public string FirmwareVersion { get; set; } = default!;
+    public uint Capabilities { get; set; } = default!;
+    public uint Ip4Address { get; set; } = default!;
+    public uint State { get; set; } = default!;
+    public (uint, uint) StateReason { get; set; } = default!;
+    public ObjectPath ActiveConnection { get; set; } = default!;
+    public ObjectPath Ip4Config { get; set; } = default!;
+    public ObjectPath Dhcp4Config { get; set; } = default!;
+    public ObjectPath Ip6Config { get; set; } = default!;
+    public ObjectPath Dhcp6Config { get; set; } = default!;
+    public bool Managed { get; set; } = default!;
+    public bool Autoconnect { get; set; } = default!;
+    public bool FirmwareMissing { get; set; } = default!;
+    public bool NmPluginMissing { get; set; } = default!;
+    public uint DeviceType { get; set; } = default!;
+    public ObjectPath[] AvailableConnections { get; set; } = default!;
+    public string PhysicalPortId { get; set; } = default!;
+    public uint Mtu { get; set; } = default!;
+    public uint Metered { get; set; } = default!;
+    public Dictionary<string, VariantValue>[] LldpNeighbors { get; set; } = default!;
+    public bool Real { get; set; } = default!;
+    public uint Ip4Connectivity { get; set; } = default!;
+    public uint Ip6Connectivity { get; set; } = default!;
+    public uint InterfaceFlags { get; set; } = default!;
+    public string HwAddress { get; set; } = default!;
+    public ObjectPath[] Ports { get; set; } = default!;
+}
