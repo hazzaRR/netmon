@@ -49,201 +49,153 @@ try
 Console.WriteLine("\nDisplaying all saved connections (active and inactive):");
 ObjectPath[] allSavedConnections = await settingsService.ListConnectionsAsync();
 
-if (allSavedConnections.Length == 0)
-{
-    Console.WriteLine("No saved connections found.");
-}
-else
-{
-    Console.WriteLine("NAME                       UUID                                  TYPE            DEVICE");
-    Console.WriteLine("-----------------------------------------------------------------------------------------");
-
-    foreach (var connPath in allSavedConnections)
+    if (allSavedConnections.Length == 0)
     {
-        var conn = service.CreateConnection(connPath);
-        var settings = await conn.GetSettingsAsync();
-
-        string name = "N/A";
-        string uuid = "N/A";
-        string type = "N/A";
-        string device = "N/A"; // Device is not directly in settings, but can be inferred
-
-        // Get Name, UUID, and Type from the "connection" section
-        if (settings.TryGetValue("connection", out var connSection))
-        {
-            if (connSection.TryGetValue("id", out var idValue) && (DBusType) idValue.Type == DBusType.String)
-            {
-                name = idValue.GetString();
-            }
-            if (connSection.TryGetValue("uuid", out var uuidValue) && (DBusType)uuidValue.Type == DBusType.String)
-            {
-                uuid = uuidValue.GetString();
-            }
-            if (connSection.TryGetValue("type", out var typeValue) && (DBusType)typeValue.Type == DBusType.String)
-            {
-                type = typeValue.GetString();
-            }
-        }
-
-        // To get the device, we'd need to check the active connections list
-        // and match by UUID. For simplicity, we'll leave this as "N/A" for now.
-        // A more complete solution would iterate through ActiveConnections and map them.
-
-        Console.WriteLine($"{name,-25}  {uuid,-36}  {type,-15} {device,-10}");
+        Console.WriteLine("No saved connections found.");
     }
+    else
+    {
+        Console.WriteLine("NAME                       UUID                                  TYPE            DEVICE");
+        Console.WriteLine("-----------------------------------------------------------------------------------------");
+
+        var compatibleConnections = new List<(string Name, string Ssid, string Mode,string Security, ObjectPath ConnectionPath)>();
+
+        foreach (var connPath in allSavedConnections)
+        {
+            var conn = service.CreateConnection(connPath);
+            var settings = await conn.GetSettingsAsync();
+
+            string name = "N/A";
+            string uuid = "N/A";
+            string type = "N/A";
+            string device = "N/A"; // Device is not directly in settings, but can be inferred
+
+
+            // Get Name, UUID, and Type from the "connection" section
+            if (settings.TryGetValue("connection", out var connSection))
+            {
+                if (connSection.TryGetValue("id", out var idValue) && (DBusType)idValue.Type == DBusType.String)
+                {
+                    name = idValue.GetString();
+                }
+                if (connSection.TryGetValue("uuid", out var uuidValue) && (DBusType)uuidValue.Type == DBusType.String)
+                {
+                    uuid = uuidValue.GetString();
+                }
+                if (connSection.TryGetValue("type", out var typeValue) && (DBusType)typeValue.Type == DBusType.String)
+                {
+                    type = typeValue.GetString();
+                }
+
+                if (typeValue == "802-11-wireless" && settings.TryGetValue("802-11-wireless", out var wifiSection) &&
+                    wifiSection.TryGetValue("ssid", out var ssidValue) &&
+                    wifiSection.TryGetValue("mode", out var modeValue) &&
+                    wifiSection.TryGetValue("security", out var securityValue))
+                {
+                    // Console.WriteLine(name);
+                    // foreach (string key in wifiSection.Keys)
+                    // {
+                    //     Console.WriteLine(key);
+                    // }
+                    string ssid = Encoding.UTF8.GetString(ssidValue.GetArray<byte>());
+                    string mode = modeValue.GetString();
+                    compatibleConnections.Add((idValue.GetString(), ssid, modeValue.GetString(), securityValue.GetString(), connPath));
+                }
+            }
+
+            Console.WriteLine($"{name,-25}  {uuid,-36}  {type,-15} {device,-10}");
+        }
+    
+        Console.WriteLine("the following networks you are already connected to:");
+        Console.WriteLine("\nSelect a network to connect to:");
+
+        for (int i = 0; i < compatibleConnections.Count; i++)
+        {
+            var connectionToConnect = compatibleConnections[i];
+            Console.WriteLine($"  [{i}] {connectionToConnect.Name}, SSSID: {connectionToConnect.Ssid}, Mode: {connectionToConnect.Mode}, Security: {connectionToConnect.Security}");
+        }
+        Console.Write("Enter the number of the network to connect to: ");
+        if (int.TryParse(Console.ReadLine(), out int selectedIndex) &&
+            selectedIndex >= 0 && selectedIndex < compatibleConnections.Count)
+        {
+            var con = compatibleConnections[selectedIndex];
+            var activeConn = await networkManager.ActivateConnectionAsync(con.ConnectionPath, wlan0Path, con.ConnectionPath);
+            Console.WriteLine($"Connection activated: {activeConn}");
+        }
 }
     
-    // ObjectPath[] activeConnectionsPaths = await networkManager.GetActiveConnectionsAsync();
+    ObjectPath[] accessPointsPaths = await wlan0Device.GetAccessPointsAsync();
 
-    // if (activeConnectionsPaths.Length == 0)
-    // {
-    //     Console.WriteLine("No active connections found.");
-    // }
-    // else
-    // {
-    //     Console.WriteLine("Found the following active connections:");
-    //     var compatibleConnections = new List<(string Name, string Ssid, ObjectPath ConnectionPath)>();
-    //     foreach (var activeConnPath in activeConnectionsPaths)
-    //     {
-    //         var activeConnection = service.CreateActive(activeConnPath);
-    //         Console.WriteLine($"  - Active Connection Path: {activeConnPath}");
+    if (accessPointsPaths.Length == 0)
+    {
+        Console.WriteLine("No access points found.");
+    }
+    else
+    {
+        Console.WriteLine("Found the following networks:");
+        Console.WriteLine("\nSelect a network to connect to:");
+        var accessPoints = new List<(string ssid, ObjectPath path)>();
 
-    //         // Get the UUID of the active connection
-    //         var connectionObjectPath = await activeConnection.GetConnectionAsync();
-    //         Console.WriteLine($"    Name: {connectionObjectPath}");
+        for (int i = 0; i < accessPointsPaths.Length; i++)
+        {
+            var accessPoint = service.CreateAccessPoint(accessPointsPaths[i]);
+            byte[] ssidBytes = await accessPoint.GetSsidAsync();
+            string ssid = Encoding.UTF8.GetString(ssidBytes);
+            byte strength = await accessPoint.GetStrengthAsync();
+            accessPoints.Add((ssid, accessPointsPaths[i]));
+            Console.WriteLine($"  [{i}] {ssid}, Signal Strength: {strength}%");
+        }
 
-    //         NetworkManager.DBus.Connection connectionObj = service.CreateConnection(connectionObjectPath);
+        Console.Write("Enter the number of the network to connect to: ");
+        if (int.TryParse(Console.ReadLine(), out int selectedIndex) &&
+            selectedIndex >= 0 && selectedIndex < accessPoints.Count)
+        {
+            string selectedSsid = accessPoints[selectedIndex].ssid;
+            Console.Write($"Enter password for '{selectedSsid}': ");
+            string password = Console.ReadLine() ?? "";
 
-    //         var settings = await connectionObj.GetSettingsAsync();
+            Console.WriteLine($"Attempting to connect to '{selectedSsid}'...");
 
-    //         foreach (string key in settings.Keys)
-    //         {
-    //             Console.WriteLine(key);
-    //         }
-
-    //         if (settings.TryGetValue("connection", out var connSection) &&
-    //         connSection.TryGetValue("type", out var typeValue) &&
-    //         typeValue == "802-11-wireless")
-    //         {
-    //             string connectionName = "Unknown";
-    //             string ssid = "Unknown";
-
-    //             if (connSection.TryGetValue("id", out var idValue))
-    //             {
-    //                 connectionName = idValue.ToString();
-    //             }
-
-    //             if (settings.TryGetValue("802-11-wireless", out var wifiSection) &&
-    //                 wifiSection.TryGetValue("ssid", out var ssidValue))
-    //             {
-    //                 // byte[] ssidBytes = (ssidValue.ToArray()).Select(v => (byte)v).ToArray();
-    //                 ssid = Encoding.UTF8.GetString(ssidValue.GetArray<byte>());
-    //                 Console.WriteLine(ssid);
-    //             }
-
-    //             compatibleConnections.Add((connectionName, ssid, connectionObjectPath));
-
-    //         }
-
-
-
-
-    //         // var activeConn = await networkManager.ActivateConnectionAsync(connectionObjectPath, wlan0Path, connectionObjectPath);
-    //         // Console.WriteLine($"Connection activated: {activeConn}");
-    //     }
-
-
-    //     Console.WriteLine("the following networks you are already connected to:");
-    //     Console.WriteLine("\nSelect a network to connect to:");
-
-    //     for (int i = 0; i < compatibleConnections.Count; i++)
-    //     {
-    //         var connectionToConnect = compatibleConnections[i];
-    //         Console.WriteLine($"  [{i}] {connectionToConnect.Name}, SSSID: {connectionToConnect.Ssid}");
-    //     }
-    //     Console.Write("Enter the number of the network to connect to: ");
-    //     if (int.TryParse(Console.ReadLine(), out int selectedIndex) &&
-    //         selectedIndex >= 0 && selectedIndex < compatibleConnections.Count)
-    //     {
-    //         var con = compatibleConnections[selectedIndex];
-    //         var activeConn = await networkManager.ActivateConnectionAsync(con.ConnectionPath, wlan0Path, con.ConnectionPath);
-    //         Console.WriteLine($"Connection activated: {activeConn}");
-    //     }
-    // }
-
-    // ObjectPath[] accessPointsPaths = await wlan0Device.GetAccessPointsAsync();
-
-    // if (accessPointsPaths.Length == 0)
-    // {
-    //     Console.WriteLine("No access points found.");
-    // }
-    // else
-    // {
-    //     Console.WriteLine("Found the following networks:");
-    //     Console.WriteLine("\nSelect a network to connect to:");
-    //     var accessPoints = new List<(string ssid, ObjectPath path)>();
-
-    //     for (int i = 0; i < accessPointsPaths.Length; i++)
-    //     {
-    //         var accessPoint = service.CreateAccessPoint(accessPointsPaths[i]);
-    //         byte[] ssidBytes = await accessPoint.GetSsidAsync();
-    //         string ssid = Encoding.UTF8.GetString(ssidBytes);
-    //         byte strength = await accessPoint.GetStrengthAsync();
-    //         accessPoints.Add((ssid, accessPointsPaths[i]));
-    //         Console.WriteLine($"  [{i}] {ssid}, Signal Strength: {strength}%");
-    //     }
-
-    //     Console.Write("Enter the number of the network to connect to: ");
-    //     if (int.TryParse(Console.ReadLine(), out int selectedIndex) &&
-    //         selectedIndex >= 0 && selectedIndex < accessPoints.Count)
-    //     {
-    //         string selectedSsid = accessPoints[selectedIndex].ssid;
-    //         Console.Write($"Enter password for '{selectedSsid}': ");
-    //         string password = Console.ReadLine() ?? "";
-
-    //         Console.WriteLine($"Attempting to connect to '{selectedSsid}'...");
-
-    //         // Create connection settings
-    //         var wifiSettings = new Dictionary<string, Dictionary<string, VariantValue>>
-    //         {
-    //             ["connection"] = new Dictionary<string, VariantValue>
-    //             {
-    //                 ["id"] = $"wifi-{selectedSsid}",
-    //                 ["type"] = "802-11-wireless",
-    //                 ["interface-name"] = "wlan0",
-    //                 ["autoconnect"] = true
-    //             },
-    //             ["802-11-wireless"] = new Dictionary<string, VariantValue>
-    //             {
-    //                 ["ssid"] = VariantValue.Array(Encoding.UTF8.GetBytes(selectedSsid)),
-    //                 ["mode"] = "infrastructure"
-    //             },
-    //             ["802-11-wireless-security"] = new Dictionary<string, VariantValue>
-    //             {
-    //                 ["key-mgmt"] = "wpa-psk",
-    //                 ["psk"] = password
-    //             },
-    //             ["ipv4"] = new Dictionary<string, VariantValue>
-    //             {
-    //                 ["method"] = "auto"
-    //             },
-    //             ["ipv6"] = new Dictionary<string, VariantValue>
-    //             {
-    //                 ["method"] = "ignore"
-    //             }
-    //         };
-
-    //         var settingsService = service.CreateSettings("/org/freedesktop/NetworkManager/Settings");
-    //         // (ObjectPath Path, ObjectPath ActiveConnection) activeConn = await networkManager.AddAndActivateConnectionAsync(wifiSettings, wlan0Path, accessPoints[selectedIndex].path);
-    //         ObjectPath wifiConnPath = await settingsService.AddConnectionAsync(wifiSettings);
-    //         var activeConn = await networkManager.ActivateConnectionAsync(wifiConnPath, wlan0Path, accessPoints[selectedIndex].path);
-    //         Console.WriteLine($"Connection activated: {activeConn}");
-    //     }
-    //     else
-    //     {
-    //         Console.WriteLine("Invalid selection.");
-    //     }
-    // }
+            // Create connection settings
+            var wifiSettings = new Dictionary<string, Dictionary<string, VariantValue>>
+            {
+                ["connection"] = new Dictionary<string, VariantValue>
+                {
+                    ["id"] = $"wifi-{selectedSsid}",
+                    ["type"] = "802-11-wireless",
+                    ["interface-name"] = "wlan0",
+                    ["autoconnect"] = true
+                },
+                ["802-11-wireless"] = new Dictionary<string, VariantValue>
+                {
+                    ["ssid"] = VariantValue.Array(Encoding.UTF8.GetBytes(selectedSsid)),
+                    ["mode"] = "infrastructure"
+                },
+                ["802-11-wireless-security"] = new Dictionary<string, VariantValue>
+                {
+                    ["key-mgmt"] = "wpa-psk",
+                    ["psk"] = password
+                },
+                ["ipv4"] = new Dictionary<string, VariantValue>
+                {
+                    ["method"] = "auto"
+                },
+                ["ipv6"] = new Dictionary<string, VariantValue>
+                {
+                    ["method"] = "ignore"
+                }
+            };
+            
+            // (ObjectPath Path, ObjectPath ActiveConnection) activeConn = await networkManager.AddAndActivateConnectionAsync(wifiSettings, wlan0Path, accessPoints[selectedIndex].path);
+            ObjectPath wifiConnPath = await settingsService.AddConnectionAsync(wifiSettings);
+            var activeConn = await networkManager.ActivateConnectionAsync(wifiConnPath, wlan0Path, accessPoints[selectedIndex].path);
+            Console.WriteLine($"Connection activated: {activeConn}");
+        }
+        else
+        {
+            Console.WriteLine("Invalid selection.");
+        }
+    }
 }
 catch (Exception ex)
 {
